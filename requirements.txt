@@ -1,2 +1,4 @@
 discord
 pandas
+requests
+pyyaml
