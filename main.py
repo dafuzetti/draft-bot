@@ -1,4 +1,5 @@
 from discord import app_commands
+from discord.ext import commands
 from discord_slash import OptionType
 import discord
 import itertools
@@ -100,7 +101,6 @@ async def breakatie(ctx, user1d: discord.User, user2d: discord.User):
 
 
 @ bot.command(name='play', description='Join the event.')
-@ bot.option(name="team", description="Define your team.", type=OptionType.STRING, choices=["A", "B"])
 async def play(ctx, team: str = None):
     event_playes = read_players(ctx)
     event_playes = add_player(event_playes, ctx.user.id, team)
@@ -115,6 +115,11 @@ async def team(ctx, team: str = None, p1: discord.User = None,
                p2: discord.User = None, p3: discord.User = None,
                p4: discord.User = None):
     await add_players(ctx, team, p1, p2, p3, p4)
+
+
+@ team.option(name="team", description="Define your team.", type=OptionType.STRING, choices=["A", "B"])
+async def team_option(ctx, team: str):
+    await ctx.respond(f"Selected team: {team}")
 
 
 @ bot.command(name='players', description='Add up to 8 players to the event.')
