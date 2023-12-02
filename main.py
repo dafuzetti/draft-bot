@@ -100,7 +100,7 @@ async def breakatie(ctx, user1d: discord.User, user2d: discord.User):
 
 
 @ bot.command(name='play', description='Join the event.')
-@ bot.option(name="team", description="Define your team.", type=OptionType.STRING, default="Hello")
+@ bot.option(name="team", description="Define your team.", type=OptionType.STRING, choices=["A", "B"])
 async def play(ctx, team: str = None):
     event_playes = read_players(ctx)
     event_playes = add_player(event_playes, ctx.user.id, team)
