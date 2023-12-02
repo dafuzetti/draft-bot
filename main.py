@@ -1,5 +1,6 @@
+
 from discord.ext import commands
-from discord import app_commands
+from discord_slash import SlashCommand
 import discord
 import itertools
 import pandas
@@ -11,6 +12,7 @@ from datetime import date
 
 my_secret = os.environ['TOKEN']
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+slash = SlashCommand(bot, sync_commands=True)
 FILE_CURRENT = 'current.csv'
 FILE_HISTORY = 'history.csv'
 FILE_PLAYERS = 'players.csv'
