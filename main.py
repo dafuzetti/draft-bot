@@ -193,7 +193,7 @@ async def dates(ctx, draft=None):
     await ctx.send(embed=embed)
 
 
-@ bot.command(name='history')
+@bot.slash_command(name='history')
 async def history(ctx, draft: int = None):
     hist = read_history(ctx)
     draftdate = ''
