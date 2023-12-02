@@ -356,7 +356,7 @@ async def close(ctx):
     return fechou
 
 
-@ bot.command(name='score')
+@bot.slash_command(name='score')
 async def score(ctx):
     dataFrame = read_history(ctx)
     dt = pandas.DataFrame()
