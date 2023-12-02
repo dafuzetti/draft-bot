@@ -1,7 +1,7 @@
-from discord import app_commands
-from discord.ext import commands
-from discord_slash import OptionType
 import discord
+from discord.ext import commands
+from discord_slash import SlashCommand, SlashContext, cog_ext
+from discord_slash.model import SlashCommandOptionType
 import itertools
 import pandas
 import numpy
@@ -110,16 +110,23 @@ async def play(ctx, team: str = None):
 
 
 @ bot.command(name='team',
-              description='Add up to 4 players to a team for the event.')
+              description='Add up to 4 players to a team for the event.',
+                   options=[
+                       {
+                           "name": "team",
+                           "description": "Define your team",
+                           "type": SlashCommandOptionType.STRING,
+                           "choices": [
+                               {"name": "Team A", "value": "A"},
+                               {"name": "Team B", "value": "B"}
+                           ],
+                           "required": True
+                       }])
+# @ bot.option(name="team", description="Define your team.", type=OptionType.STRING, choices=["A", "B"])
 async def team(ctx, team: str = None, p1: discord.User = None,
                p2: discord.User = None, p3: discord.User = None,
                p4: discord.User = None):
     await add_players(ctx, team, p1, p2, p3, p4)
-
-
-@ team.option(name="team", description="Define your team.", type=OptionType.STRING, choices=["A", "B"])
-async def team_option(ctx, team: str):
-    await ctx.respond(f"Selected team: {team}")
 
 
 @ bot.command(name='players', description='Add up to 8 players to the event.')
