@@ -1,5 +1,4 @@
-discord
-discord-ext-slash
+discord.py>=2.0.0a
 pandas
 requests
 pyyaml
