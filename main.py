@@ -1,7 +1,4 @@
 from discord import app_commands
-from discord.ext import commands
-from discord_slash import SlashCommand, SlashContext, cog_ext
-from discord_slash.model import SlashCommandOptionType
 import discord
 import itertools
 import pandas
@@ -111,19 +108,7 @@ async def play(ctx, team: str = None):
 
 
 @ bot.command(name='team',
-              description='Add up to 4 players to a team for the event.',
-                   options=[
-                       {
-                           "name": "team",
-                           "description": "Define your team",
-                           "type": SlashCommandOptionType.STRING,
-                           "choices": [
-                               {"name": "Team A", "value": "A"},
-                               {"name": "Team B", "value": "B"}
-                           ],
-                           "required": True
-                       }])
-# @ bot.option(name="team", description="Define your team.", type=OptionType.STRING, choices=["A", "B"])
+              description='Add up to 4 players to a team for the event.')
 async def team(ctx, team: str = None, p1: discord.User = None,
                p2: discord.User = None, p3: discord.User = None,
                p4: discord.User = None):
@@ -140,18 +125,18 @@ async def players(ctx, p1: discord.User, p2: discord.User = None,
 
 @ bot.command(name='lose', description='Report a match that you lose.')
 async def lose(ctx, player_win: discord.User, gameloss: int = 0):
-    await resultado(ctx, player_win, id_to_usr(ctx.user.id), gameloss)
+    await resultado(ctx, id_to_usr(player_win.id), id_to_usr(ctx.user.id), gameloss)
 
 
 @ bot.command(name='win', description='Report a match that you won.')
 async def win(ctx, player_lost: discord.User, gameloss: int = 0):
-    await resultado(ctx, id_to_usr(ctx.user.id), player_lost, gameloss)
+    await resultado(ctx, id_to_usr(ctx.user.id), id_to_usr(player_lost.id), gameloss)
 
 
 @ bot.command(name='result', description='Report the result of a match.')
 async def result(ctx, player_win: discord.User,
                  player_lose: discord.User, gameloss: int = 0):
-    await resultado(ctx, player_win, player_lose, gameloss)
+    await resultado(ctx, id_to_usr(player_win.id), id_to_usr(player_lose.id), gameloss)
 
 
 @ bot.command(name='dates', description='History of draft\'s dates list.')
@@ -171,6 +156,36 @@ async def dates(ctx):
 
 @bot.command(name='history', description='Draft history details.')
 async def history(ctx, draft: int = None):
+    await history_run(ctx, draft)
+
+
+@ bot.command(name='event', description='Manage current event.')
+async def event(ctx, action: str = '', draftdate: str = None):
+    data = None
+    ifclose = False
+    match action.lower():
+        case 'start':
+            if draftdate is None:
+                draftdate = date.today().strftime("%d/%m/%Y")
+            data = await start(ctx, draftdate)
+            await print_event(ctx, data)
+        case 'close':
+            ifclose = await close(ctx)
+            if ifclose:
+                await history_run(ctx)
+            else:
+                await print_event(ctx, data)
+        case 'clear':
+            await clear(ctx)
+            await print_event(ctx)
+        case 'rdm':
+            data = event_rdm(ctx)
+            await print_event(ctx, data)
+        case _:
+            await print_event(ctx)
+
+
+async def history_run(ctx, draft: int = None):
     hist = read_history(ctx)
     draftdate = ''
     if draft is None:
@@ -210,32 +225,6 @@ async def history(ctx, draft: int = None):
     embed.add_field(name='Matches: ' + str(totalA + totalB),
                     value=marchlist, inline=False)
     await ctx.response.send_message(embed=embed)
-
-
-@ bot.command(name='event', description='Manage current event.')
-async def event(ctx, action: str = '', draftdate: str = None):
-    data = None
-    ifclose = False
-    match action.lower():
-        case 'start':
-            if draftdate is None:
-                draftdate = date.today().strftime("%d/%m/%Y")
-            data = await start(ctx, draftdate)
-            await print_event(ctx, data)
-        case 'close':
-            ifclose = await close(ctx)
-            if ifclose:
-                await history(ctx)
-            else:
-                await print_event(ctx, data)
-        case 'clear':
-            await clear(ctx)
-            await print_event(ctx)
-        case 'rdm':
-            data = event_rdm(ctx)
-            await print_event(ctx, data)
-        case _:
-            await print_event(ctx)
 
 
 def event_rdm(ctx):

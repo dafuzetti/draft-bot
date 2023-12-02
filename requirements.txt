@@ -1,3 +1,2 @@
 discord.py[voice]>=2.0.0a
-discord-py-slash-command
 pandas
