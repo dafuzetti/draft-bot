@@ -1,6 +1,6 @@
 
-from discord.ext import commands
-from discord.ext.commands import Bot
+from discord import app_commands
+from discord_slash import OptionType
 import discord
 import itertools
 import pandas
@@ -11,23 +11,22 @@ from datetime import datetime
 from datetime import date
 
 my_secret = os.environ['TOKEN']
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
+bot = app_commands.CommandTree(client)
 FILE_CURRENT = 'current.csv'
 FILE_HISTORY = 'history.csv'
 FILE_PLAYERS = 'players.csv'
 FILE_START = 'start.txt'
-EU = 723638398312513586
 
 
-def filenames(ctx, name):
-    folder_path = 'channel_' + str(ctx.guild.id)
-    full_path = os.path.join(folder_path, name)
-    return str(full_path)
+@client.event
+async def on_guild_join(guild):
+    await folder(guild)
 
 
-@ bot.command(name='folder')
-async def folder(ctx):
-    folder_path = 'channel_' + str(ctx.guild.id)
+async def folder(guild):
+    folder_path = 'channel_' + str(guild.id)
     if not os.path.exists(folder_path):
         full_pathc = os.path.join(folder_path, FILE_CURRENT)
         os.makedirs(folder_path, exist_ok=True)
@@ -48,139 +47,105 @@ async def folder(ctx):
         file.close()
 
 
-def windiff_a(currentin):
-    current = currentin
-    current['W-A'] = pandas.to_numeric(current['W-A'], errors='coerce')
-    current['W-B'] = pandas.to_numeric(current['W-B'], errors='coerce')
+@bot.command(name='score', description='All time scoreboard for the channel!')
+async def score(ctx):
+    dataFrame = read_history(ctx)
+    dt = pandas.DataFrame()
 
-    diff = (current[current['W-A'] == 2]['Team A'].count()) - \
-        (current[current['W-B'] == 2]['Team B'].count())
-    diff2 = (current[current['W-A'] == 1]['Team A'].count()) - \
-        (current[current['W-B'] == 1]['Team B'].count())
-    return (diff * 100) + diff2
+    dt = dataFrame.groupby(['Player', 'Date']).agg(
+        {'Victory': 'mean', 'Match': ['count', 'sum']}).reset_index()
+    dt.columns = [col[0] + '_' + col[1] if col[1] else col[0]
+                  for col in dt.columns]
+    dt = dt.groupby(['Player']).agg(
+        {'Date': 'count', 'Victory_mean': 'sum', 'Match_sum': 'sum', 'Match_count': 'sum'}).reset_index()
+    dt = dt.rename(
+        columns={"Date": "T(D)",
+                 "Victory_mean": "Draft Wins",
+                 "Match_count": "T(M)",
+                 "Match_sum": "Match Wins"})
+    dt = dt.reindex(
+        columns=['Draft Wins', 'T(D)', 'Match Wins', 'T(M)', 'Player'])
+    dt['Draft Wins'] = dt['Draft Wins'].astype(int)
+    dt.sort_values(['Draft Wins', 'Match Wins', 'Player'],
+                   axis=0, inplace=True, ascending=False,
+                   na_position='first')
 
-
-async def print_event(ctx, data=None):
-    if data is None:
-        dt = read_current(ctx)
-    else:
-        dt = data
-    if len(dt) > 0 and dt.shape[1] > 2:
-        await print_event_started(ctx, dt)
-    else:
-        await print_players(ctx)
-
-
-async def print_players(ctx):
-    dt = read_players(ctx)
-    embed = discord.Embed(title=f"__**Players**__", color=0x03f8fc)
-    list = dt.values.tolist()
-    playersA = ''
-    playersB = ''
-    for match in list:
-        if str(match[1]) == 'A':
-            playersA = playersA + match[0] + ' '
-        if str(match[1]) == 'B':
-            playersB = playersB + match[0] + ' '
-
-    embed.add_field(name='Team A', value=playersA, inline=False)
-    embed.add_field(name='Team B', value=playersB, inline=False)
-    await ctx.send(embed=embed)
-
-
-async def print_event_started(ctx, dt):
-    name = read_start(ctx)
-    embed = discord.Embed(title=f"__**{name[:10]}**__", color=0x03f8fc)
-    list = dt.values.tolist()
-    count = len(list)
-    matches = ''
-    playersA = ''
-    playersB = ''
-    winA = 0
-    winB = 0
+    embed = discord.Embed(title="__**Scoreboard:**__", color=0x03f8fc)
     pos = 0
-    nrp = math.sqrt(count)
-    toadd = 1
-    emjA = ':family:'
-    emjB = ':family:'
+    list = dt.values.tolist()
     for match in list:
         pos = pos + 1
-        if str(match[1]) == '2':
-            winA = winA + 1
-        if str(match[3]) == '2':
-            winB = winB + 1
-        if pos == toadd:
-            playersA = playersA + match[0]
-            playersB = playersB + match[2]
-            toadd = toadd + nrp + 1
-        matches = matches + str(match[0]) + ' ' + str(match[1]) + \
-            '-' + str(match[3]) + ' ' + str(match[2]) + '\n'
-
-    if winA > winB:
-        emjA = ':airplane:'
-        emjB = ':poo:'
-    if winB > winA:
-        emjA = ':poo:'
-        emjB = ':airplane:'
-    if winA > count/2:
-        emjA = ':trophy:'
-        emjB = ':skull:'
-    if winB > count/2:
-        emjA = ':skull:'
-        emjB = ':trophy:'
-    embed.add_field(name=f'Team A ' + emjA,
-                    value=f'Players: {playersA}\nWin: {winA}', inline=False)
-    embed.add_field(name=f'Team B ' + emjB,
-                    value=f'Players: {playersB}\nWin: {winB}', inline=False)
-    embed.add_field(name=f'Pairings: {winA + winB}/{count}',
-                    value=matches, inline=False)
-    await ctx.send(embed=embed)
+        embed.add_field(name=f'Rank: {pos}',
+                        value=f'Player: {match[4]}\nDraft: {match[0]}/{match[1]} - {match[0]*100//match[1]}%\nMatch: {match[2]}/{match[3]} - {match[2]*100//match[3]}%', inline=True)
+    await ctx.response.send_message(embed=embed)
 
 
-def id_to_usr(id):
-    return '<@'+str(id)+'>'
-
-
-async def resultado(ctx, userW, userL, loss=0):
-    gameloss = 0
-    if loss != 0:
-        gameloss = 1
-    df = read_current(ctx)
-    objs = df.loc[df['Team A'].isin(
-        [userW, userL]) & df['Team B'].isin([userW, userL])]
-    matches = len(objs)
-    if matches > 0:
-        teamA = (len(objs.loc[objs['Team A'] == userW]) > 0)
-        if teamA:
-            df.at[objs.index[matches-1], 'W-A'] = 2
-            df.at[objs.index[matches-1], 'W-B'] = gameloss
-        else:
-            df.at[objs.index[matches-1], 'W-A'] = gameloss
-            df.at[objs.index[matches-1], 'W-B'] = 2
-        df.to_csv(filenames(ctx, FILE_CURRENT), sep=',',
-                  index=False, encoding='utf-8')
+@ bot.command(name='breakatie',
+              description='Add a match to the event when there is a tie.')
+async def breakatie(ctx, user1d: discord.User, user2d: discord.User):
+    user1 = id_to_usr(user1d.id)
+    user2 = id_to_usr(user2d.id)
+    event_playes = read_current(ctx)
+    windiff_teamA = windiff_a(event_playes)
+    if windiff_teamA == 0:
+        objs = event_playes.loc[event_playes['Team A'].isin(
+            [user1, user2]) & event_playes['Team B'].isin([user1, user2])]
+        if len(objs) == 1:
+            objs.at[objs.index[0], 'W-A'] = '-'
+            objs.at[objs.index[0], 'W-B'] = '-'
+            event_playes = pandas.concat(
+                [event_playes, objs], ignore_index=True)
+            event_playes.to_csv(filenames(ctx, FILE_CURRENT), sep=',',
+                                index=False, encoding='utf-8')
     await print_event(ctx)
 
 
-@ bot.command(name='lose')
-async def lose(ctx, player_win, gameloss=0):
-    await resultado(ctx, player_win, id_to_usr(ctx.author.id), gameloss)
+@ bot.command(name='play', description='Join the event.')
+@ bot.option(name="team", description="Define your team.", type=OptionType.STRING, default="Hello")
+async def play(ctx, team: str = None):
+    event_playes = read_players(ctx)
+    event_playes = add_player(event_playes, ctx.user.id, team)
+    event_playes.to_csv(filenames(ctx, FILE_PLAYERS),
+                        sep=',', index=False, encoding='utf-8')
+    await print_event(ctx)
 
 
-@ bot.command(name='win')
-async def win(ctx, player_lost, gameloss=0):
-    await resultado(ctx, id_to_usr(ctx.author.id), player_lost, gameloss)
+@ bot.command(name='team',
+              description='Add up to 4 players to a team for the event.')
+async def team(ctx, team: str = None, p1: discord.User = None,
+               p2: discord.User = None, p3: discord.User = None,
+               p4: discord.User = None):
+    await add_players(ctx, team, p1, p2, p3, p4)
 
 
-@ bot.command(name='result')
-async def result(ctx, player_win, player_lose, gameloss=0):
+@ bot.command(name='players', description='Add up to 8 players to the event.')
+async def players(ctx, p1: discord.User, p2: discord.User = None,
+                  p3: discord.User = None, p4: discord.User = None,
+                  p5: discord.User = None, p6: discord.User = None,
+                  p7: discord.User = None, p8: discord.User = None):
+    await add_players(ctx, None, p1, p2, p3, p4, p5, p6, p7, p8)
+
+
+@ bot.command(name='lose', description='Report a match that you lose.')
+async def lose(ctx, player_win: discord.User, gameloss: int = 0):
+    await resultado(ctx, player_win, id_to_usr(ctx.user.id), gameloss)
+
+
+@ bot.command(name='win', description='Report a match that you won.')
+async def win(ctx, player_lost: discord.User, gameloss: int = 0):
+    await resultado(ctx, id_to_usr(ctx.user.id), player_lost, gameloss)
+
+
+@ bot.command(name='result', description='Report the result of a match.')
+async def result(ctx, player_win: discord.User,
+                 player_lose: discord.User, gameloss: int = 0):
     await resultado(ctx, player_win, player_lose, gameloss)
 
 
-@ bot.command(name='dates')
-async def dates(ctx, draft=None):
+@ bot.command(name='dates', description='History of draft\'s dates list.')
+async def dates(ctx):
     hist = read_history(ctx)
-    embed = discord.Embed(title=f"__**Draft**__", color=0x03f8fc)
+    embed = discord.Embed(title="__**Draft**__", color=0x03f8fc)
     list = hist['Date'].unique()
     count = 0
     dates = ''
@@ -189,10 +154,10 @@ async def dates(ctx, draft=None):
         dates = dates + str(count) + '-' + match + '\n'
 
     embed.add_field(name='Dates', value=dates, inline=False)
-    await ctx.send(embed=embed)
+    await ctx.response.send_message(embed=embed)
 
 
-@bot.slash_command(name='history')
+@bot.command(name='history', description='Draft history details.')
 async def history(ctx, draft: int = None):
     hist = read_history(ctx)
     draftdate = ''
@@ -232,35 +197,33 @@ async def history(ctx, draft: int = None):
                     totalB}', value=playersB, inline=False)
     embed.add_field(name='Matches: ' + str(totalA + totalB),
                     value=marchlist, inline=False)
-    await ctx.send(embed=embed)
+    await ctx.response.send_message(embed=embed)
 
 
-@ bot.command(name='event')
-async def event(ctx, action='', date=None):
+@ bot.command(name='event', description='Manage current event.')
+async def event(ctx, action: str = '', draftdate: str = None):
     data = None
     ifclose = False
     match action.lower():
         case 'start':
-            data = await start(ctx, date)
+            if draftdate is None:
+                draftdate = date.today().strftime("%d/%m/%Y")
+            data = await start(ctx, draftdate)
             await print_event(ctx, data)
         case 'close':
-            if ctx.author.id == EU:
-                ifclose = await close(ctx)
-                if ifclose:
-                    await history(ctx)
-                else:
-                    await print_event(ctx, data)
+            ifclose = await close(ctx)
+            if ifclose:
+                await history(ctx)
             else:
                 await print_event(ctx, data)
         case 'clear':
-            if ctx.author.id == EU:
-                await clear()
-            await print_event(ctx, data)
+            await clear(ctx)
+            await print_event(ctx)
         case 'rdm':
             data = event_rdm(ctx)
             await print_event(ctx, data)
         case _:
-            await print_event(ctx, data)
+            await print_event(ctx)
 
 
 def event_rdm(ctx):
@@ -279,11 +242,11 @@ async def clear(ctx):
                                sep=',', index=False, encoding='utf-8')
     dataframe_current().to_csv(filenames(ctx, FILE_CURRENT),
                                sep=',', index=False, encoding='utf-8')
-    read_start(ctx, True)
+    read_start(ctx, date.today().strftime("%d/%m/%Y"))
 
 
 async def start(ctx, date):
-    read_start(ctx, True, date)
+    read_start(ctx, date)
     df = read_players(ctx)
     counts = df['Team'].value_counts()
     if len(df) in [4, 6, 8] and counts.nunique() == 1 and len(counts) == 2:
@@ -299,18 +262,15 @@ async def start(ctx, date):
     return df
 
 
-def read_start(ctx, clean=False, datein=None):
+def read_start(ctx, datein=None):
     draftID = ''
-    if not clean:
-        with open(FILE_START, 'r') as f:
+    if datein is None:
+        datein = date.today().strftime("%d/%m/%Y")
+        with open(filenames(ctx, FILE_START), 'r') as f:
             draftID = f.readline()
         f.close()
-    if len(draftID) == 0 or clean:
-        if datein is None:
-            draftID = date.today().strftime("%d/%m/%Y")
-            draftID = draftID + '-' + datetime.now().strftime("%H%M%S")
-        else:
-            draftID = datein + '-' + datetime.now().strftime("%H%M%S")
+    if len(draftID) == 0:
+        draftID = str(datein) + '-' + datetime.now().strftime("%H%M%S")
         with open(filenames(ctx, FILE_START), 'w') as f:
             f.write(draftID)
         f.close()
@@ -357,93 +317,31 @@ async def close(ctx):
     return fechou
 
 
-@bot.slash_command(name='score')
-async def score(ctx):
-    dataFrame = read_history(ctx)
-    dt = pandas.DataFrame()
-
-    dt = dataFrame.groupby(['Player', 'Date']).agg(
-        {'Victory': 'mean', 'Match': ['count', 'sum']}).reset_index()
-    dt.columns = [col[0] + '_' + col[1] if col[1] else col[0]
-                  for col in dt.columns]
-    dt = dt.groupby(['Player']).agg(
-        {'Date': 'count', 'Victory_mean': 'sum', 'Match_sum': 'sum', 'Match_count': 'sum'}).reset_index()
-    dt = dt.rename(
-        columns={"Date": "T(D)",
-                 "Victory_mean": "Draft Wins",
-                 "Match_count": "T(M)",
-                 "Match_sum": "Match Wins"})
-    dt = dt.reindex(
-        columns=['Draft Wins', 'T(D)', 'Match Wins', 'T(M)', 'Player'])
-    dt['Draft Wins'] = dt['Draft Wins'].astype(int)
-    dt.sort_values(['Draft Wins', 'Match Wins', 'Player'],
-                   axis=0, inplace=True, ascending=False,
-                   na_position='first')
-
-    embed = discord.Embed(title=f"__**Scoreboard:**__", color=0x03f8fc)
-    pos = 0
-    list = dt.values.tolist()
-    for match in list:
-        pos = pos + 1
-        embed.add_field(name=f'Rank: {pos}',
-                        value=f'Player: {match[4]}\nDraft: {match[0]}/{match[1]} - {match[0]*100//match[1]}%\nMatch: {match[2]}/{match[3]} - {match[2]*100//match[3]}%', inline=True)
-    await ctx.send(embed=embed)
-
-
-@ bot.command(name='breakatie')
-async def breakatie(ctx, user1, user2):
-    event_playes = read_current(ctx)
-    windiff_teamA = windiff_a(event_playes)
-    if windiff_teamA == 0:
-        objs = event_playes.loc[event_playes['Team A'].isin(
-            [user1, user2]) & event_playes['Team B'].isin([user1, user2])]
-        if len(objs) == 1:
-            objs.at[objs.index[0], 'W-A'] = '-'
-            objs.at[objs.index[0], 'W-B'] = '-'
-            event_playes = pandas.concat(
-                [event_playes, objs], ignore_index=True)
-            event_playes.to_csv(filenames(ctx, FILE_CURRENT), sep=',',
-                                index=False, encoding='utf-8')
-    await print_event(ctx)
-
-
-@ bot.command(name='play')
-async def play(ctx, team=None):
+async def add_players(ctx, team, p1: discord.User, p2: discord.User = None,
+                      p3: discord.User = None, p4: discord.User = None,
+                      p5: discord.User = None, p6: discord.User = None,
+                      p7: discord.User = None, p8: discord.User = None):
     event_playes = read_players(ctx)
-    event_playes = add_player(event_playes, id_to_usr(ctx.author.id), team)
-    event_playes.to_csv(filenames(ctx, FILE_PLAYERS),
-                        sep=',', index=False, encoding='utf-8')
-    await print_event(ctx)
-
-
-@ bot.command(name='playersB')
-async def playersB(ctx, p1, p2=None, p3=None, p4=None):
-    await add_players(ctx, 'B', p1, p2, p3, p4)
-
-
-@ bot.command(name='playersA')
-async def playersA(ctx, p1, p2=None, p3=None, p4=None):
-    await add_players(ctx, 'A', p1, p2, p3, p4)
-
-
-@ bot.command(name='players')
-async def players(ctx, p1, p2=None, p3=None, p4=None):
-    await add_players(ctx, None, p1, p2, p3, p4)
-
-
-async def add_players(ctx, team, p1, p2=None, p3=None, p4=None):
-    event_playes = read_players(ctx)
-    event_playes = add_player(event_playes, p1, team)
-    event_playes = add_player(event_playes, p2, team)
-    event_playes = add_player(event_playes, p3, team)
-    event_playes = add_player(event_playes, p4, team)
+    list = []
+    list.append(p1)
+    list.append(p2)
+    list.append(p3)
+    list.append(p4)
+    list.append(p5)
+    list.append(p6)
+    list.append(p7)
+    list.append(p8)
+    for player in list:
+        if player is not None:
+            event_playes = add_player(event_playes, player.id, team)
     event_playes.to_csv(filenames(ctx, FILE_PLAYERS),
                         sep=',', index=False, encoding='utf-8')
     await print_event(ctx, event_playes)
 
 
-def add_player(event_playes, user, team=None):
-    if user is not None and len(event_playes) < 8:
+def add_player(event_playes, userdata: str, team=None):
+    if userdata is not None and len(event_playes) < 8:
+        user = id_to_usr(userdata)
         condition = event_playes['Player'] == user
         event_playes = event_playes.drop(event_playes[condition].index)
         if team not in ('A', 'B'):
@@ -504,10 +402,131 @@ async def send_file(ctx):
         return
 
 
-@ bot.event
+def filenames(ctx, name):
+    folder_path = 'channel_' + str(ctx.guild.id)
+    full_path = os.path.join(folder_path, name)
+    return str(full_path)
+
+
+def windiff_a(currentin):
+    current = currentin
+    current['W-A'] = pandas.to_numeric(current['W-A'], errors='coerce')
+    current['W-B'] = pandas.to_numeric(current['W-B'], errors='coerce')
+
+    diff = (current[current['W-A'] == 2]['Team A'].count()) - \
+        (current[current['W-B'] == 2]['Team B'].count())
+    diff2 = (current[current['W-A'] == 1]['Team A'].count()) - \
+        (current[current['W-B'] == 1]['Team B'].count())
+    return (diff * 100) + diff2
+
+
+async def print_event(ctx, data=None):
+    if data is None:
+        dt = read_current(ctx)
+    else:
+        dt = data
+    if len(dt) > 0 and dt.shape[1] > 2:
+        await print_event_started(ctx, dt)
+    else:
+        await print_players(ctx)
+
+
+async def print_players(ctx):
+    dt = read_players(ctx)
+    embed = discord.Embed(title="__**Players**__", color=0x03f8fc)
+    list = dt.values.tolist()
+    playersA = ''
+    playersB = ''
+    for match in list:
+        if str(match[1]) == 'A':
+            playersA = playersA + match[0] + ' '
+        if str(match[1]) == 'B':
+            playersB = playersB + match[0] + ' '
+
+    embed.add_field(name='Team A', value=playersA, inline=False)
+    embed.add_field(name='Team B', value=playersB, inline=False)
+    await ctx.response.send_message(embed=embed)
+
+
+async def print_event_started(ctx, dt):
+    name = read_start(ctx)
+    embed = discord.Embed(title=f"__**{name[:10]}**__", color=0x03f8fc)
+    list = dt.values.tolist()
+    count = len(list)
+    matches = ''
+    playersA = ''
+    playersB = ''
+    winA = 0
+    winB = 0
+    pos = 0
+    nrp = math.sqrt(count)
+    toadd = 1
+    emjA = ':family:'
+    emjB = ':family:'
+    for match in list:
+        pos = pos + 1
+        if str(match[1]) == '2':
+            winA = winA + 1
+        if str(match[3]) == '2':
+            winB = winB + 1
+        if pos == toadd:
+            playersA = playersA + match[0]
+            playersB = playersB + match[2]
+            toadd = toadd + nrp + 1
+        matches = matches + str(match[0]) + ' ' + str(match[1]) + \
+            '-' + str(match[3]) + ' ' + str(match[2]) + '\n'
+
+    if winA > winB:
+        emjA = ':airplane:'
+        emjB = ':poo:'
+    if winB > winA:
+        emjA = ':poo:'
+        emjB = ':airplane:'
+    if winA > count/2:
+        emjA = ':trophy:'
+        emjB = ':skull:'
+    if winB > count/2:
+        emjA = ':skull:'
+        emjB = ':trophy:'
+    embed.add_field(name='Team A ' + str(emjA),
+                    value=f'Players: {playersA}\nWin: {winA}', inline=False)
+    embed.add_field(name='Team B ' + str(emjB),
+                    value=f'Players: {playersB}\nWin: {winB}', inline=False)
+    embed.add_field(name=f'Pairings: {winA + winB}/{count}',
+                    value=matches, inline=False)
+    await ctx.response.send_message(embed=embed)
+
+
+def id_to_usr(id):
+    return '<@'+str(id)+'>'
+
+
+async def resultado(ctx, userW, userL, loss=0):
+    gameloss = 0
+    if loss != 0:
+        gameloss = 1
+    df = read_current(ctx)
+    objs = df.loc[df['Team A'].isin(
+        [userW, userL]) & df['Team B'].isin([userW, userL])]
+    matches = len(objs)
+    if matches > 0:
+        teamA = (len(objs.loc[objs['Team A'] == userW]) > 0)
+        if teamA:
+            df.at[objs.index[matches-1], 'W-A'] = 2
+            df.at[objs.index[matches-1], 'W-B'] = gameloss
+        else:
+            df.at[objs.index[matches-1], 'W-A'] = gameloss
+            df.at[objs.index[matches-1], 'W-B'] = 2
+        df.to_csv(filenames(ctx, FILE_CURRENT), sep=',',
+                  index=False, encoding='utf-8')
+    await print_event(ctx)
+
+
+@ client.event
 async def on_ready():
-    await bot.change_presence()
-    print('Running: {0.user}'.format(bot))
+    await client.change_presence()
+    await bot.sync()
+    print('Running')
 
 
-bot.run(my_secret)
+client.run(my_secret)
