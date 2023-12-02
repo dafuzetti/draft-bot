@@ -1,4 +1,3 @@
-
 from discord import app_commands
 from discord_slash import OptionType
 import discord
