@@ -220,8 +220,7 @@ async def history_run(ctx, draft: int = None):
                 str(match[6]) + ' ' + str(match[5]) + '\n'
     embed.add_field(
         name=f'Winners: {totalA}', value=playersA, inline=False)
-    embed.add_field(name=f'Less winners: {
-                    totalB}', value=playersB, inline=False)
+    embed.add_field(name=f'Less winners: {totalB}', value=playersB, inline=False)
     embed.add_field(name='Matches: ' + str(totalA + totalB),
                     value=marchlist, inline=False)
     await ctx.response.send_message(embed=embed)
