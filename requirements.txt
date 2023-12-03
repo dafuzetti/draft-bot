@@ -1,3 +1,4 @@
 discord.py[voice]>=2.0.0a
 python-dotenv
+python-decouple
 pandas
