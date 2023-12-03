@@ -7,8 +7,9 @@ import math
 import os
 from datetime import datetime
 from datetime import date
+from decouple import config
 
-my_secret = os.environ['TOKEN']
+my_secret = config("TOKEN")
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 bot = app_commands.CommandTree(client)
