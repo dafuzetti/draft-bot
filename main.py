@@ -4,8 +4,7 @@ import itertools
 import pandas
 import numpy
 import math
-import os
-from datetime import datetime
+import data_base
 from datetime import date
 from decouple import config
 
@@ -13,42 +12,16 @@ my_secret = config("TOKEN")
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 bot = app_commands.CommandTree(client)
-FILE_CURRENT = 'current.csv'
-FILE_HISTORY = 'history.csv'
-FILE_PLAYERS = 'players.csv'
-FILE_START = 'start.txt'
 
 
 @client.event
 async def on_guild_join(guild):
-    await folder(guild)
-
-
-async def folder(guild):
-    folder_path = 'channel_' + str(guild.id)
-    if not os.path.exists(folder_path):
-        full_pathc = os.path.join(folder_path, FILE_CURRENT)
-        os.makedirs(folder_path, exist_ok=True)
-        with open(full_pathc, 'w') as file:
-            file.write('')
-        file.close()
-        full_pathc = os.path.join(folder_path, FILE_HISTORY)
-        with open(full_pathc, 'w') as file:
-            file.write('')
-        file.close()
-        full_pathc = os.path.join(folder_path, FILE_PLAYERS)
-        with open(full_pathc, 'w') as file:
-            file.write('')
-        file.close()
-        full_pathc = os.path.join(folder_path, FILE_START)
-        with open(full_pathc, 'w') as file:
-            file.write('')
-        file.close()
+    await data_base.folder(guild)
 
 
 @bot.command(name='score', description='All time scoreboard for the channel!')
 async def score(ctx):
-    dataFrame = read_history(ctx)
+    dataFrame = data_base.read_history(ctx)
     dt = pandas.DataFrame()
 
     dt = dataFrame.groupby(['Player', 'Date']).agg(
@@ -84,7 +57,7 @@ async def score(ctx):
 async def breakatie(ctx, user1d: discord.User, user2d: discord.User):
     user1 = id_to_usr(user1d.id)
     user2 = id_to_usr(user2d.id)
-    event_playes = read_current(ctx)
+    event_playes = data_base.read_current(ctx)
     windiff_teamA = windiff_a(event_playes)
     if windiff_teamA == 0:
         objs = event_playes.loc[event_playes['Team A'].isin(
@@ -94,17 +67,15 @@ async def breakatie(ctx, user1d: discord.User, user2d: discord.User):
             objs.at[objs.index[0], 'W-B'] = '-'
             event_playes = pandas.concat(
                 [event_playes, objs], ignore_index=True)
-            event_playes.to_csv(filenames(ctx, FILE_CURRENT), sep=',',
-                                index=False, encoding='utf-8')
+            await data_base.save_current(ctx, event_playes)
     await print_event(ctx)
 
 
 @ bot.command(name='play', description='Join the event.')
 async def play(ctx, team: str = None):
-    event_playes = read_players(ctx)
+    event_playes = data_base.read_players(ctx)
     event_playes = add_player(event_playes, ctx.user.id, team)
-    event_playes.to_csv(filenames(ctx, FILE_PLAYERS),
-                        sep=',', index=False, encoding='utf-8')
+    await data_base.save_players(ctx, event_playes)
     await print_event(ctx)
 
 
@@ -142,7 +113,7 @@ async def result(ctx, player_win: discord.User,
 
 @ bot.command(name='dates', description='History of draft\'s dates list.')
 async def dates(ctx):
-    hist = read_history(ctx)
+    hist = data_base.read_history(ctx)
     embed = discord.Embed(title="__**Draft**__", color=0x03f8fc)
     list = hist['Date'].unique()
     count = 0
@@ -157,7 +128,7 @@ async def dates(ctx):
 
 @ bot.command(name='ids', description='History of draft\'s dates list.')
 async def ids(ctx):
-    hist = read_history(ctx)
+    hist = data_base.read_history(ctx)
     embed = discord.Embed(
         title=f"__**Channel id:{ctx.guild.id}**__", color=0x03f8fc)
     list = hist['Player'].unique()
@@ -203,7 +174,7 @@ async def event(ctx, action: str = '', draftdate: str = None):
 
 
 async def history_run(ctx, draft: int = None):
-    hist = read_history(ctx)
+    hist = data_base.read_history(ctx)
     draftdate = ''
     if draft is None:
         last_row = hist.iloc[-1]
@@ -244,28 +215,25 @@ async def history_run(ctx, draft: int = None):
     await ctx.response.send_message(embed=embed)
 
 
-def event_rdm(ctx):
-    df = read_players(ctx)
+async def event_rdm(ctx):
+    df = data_base.read_players(ctx)
     half_size = len(df) // 2
     random_indices = numpy.random.choice(df.index, half_size, replace=False)
     df.loc[random_indices, 'Team'] = 'A'
     df.loc[~df.index.isin(random_indices), 'Team'] = 'B'
-    df.to_csv(filenames(ctx, FILE_PLAYERS), sep=',',
-              index=False, encoding='utf-8')
+    await data_base.save_players(ctx, df)
     return df
 
 
 async def clear(ctx):
-    dataframe_players().to_csv(filenames(ctx, FILE_PLAYERS),
-                               sep=',', index=False, encoding='utf-8')
-    dataframe_current().to_csv(filenames(ctx, FILE_CURRENT),
-                               sep=',', index=False, encoding='utf-8')
-    read_start(ctx, date.today().strftime("%d/%m/%Y"))
+    await data_base.save_players(ctx, data_base.dataframe_players())
+    await data_base.save_current(ctx, data_base.dataframe_current())
+    data_base.read_start(ctx, date.today().strftime("%d/%m/%Y"))
 
 
 async def start(ctx, date):
-    read_start(ctx, date)
-    df = read_players(ctx)
+    data_base.read_start(ctx, date)
+    df = data_base.read_players(ctx)
     counts = df['Team'].value_counts()
     if len(df) in [4, 6, 8] and counts.nunique() == 1 and len(counts) == 2:
         TeamA = df[df['Team'] == 'A']
@@ -275,35 +243,19 @@ async def start(ctx, date):
         df = pandas.DataFrame(Mlist, columns=['Team A', 'Team B'])
         df.insert(1, 'W-A', '-')
         df.insert(3, 'W-B', '-')
-        df.to_csv(filenames(ctx, FILE_CURRENT), sep=',',
-                  index=False, encoding='utf-8')
+        await data_base.save_current(ctx, df)
     return df
 
 
-def read_start(ctx, datein=None):
-    draftID = ''
-    if datein is None:
-        datein = date.today().strftime("%d/%m/%Y")
-        with open(filenames(ctx, FILE_START), 'r') as f:
-            draftID = f.readline()
-        f.close()
-    if len(draftID) == 0:
-        draftID = str(datein) + '-' + datetime.now().strftime("%H%M%S")
-        with open(filenames(ctx, FILE_START), 'w') as f:
-            f.write(draftID)
-        f.close()
-    return draftID
-
-
 async def close(ctx):
-    current = read_current(ctx)
+    current = data_base.read_current(ctx)
     current = current[(current['W-A'] != '-') & (current['W-B'] != '-')]
     windiff_teamA = windiff_a(current)
     fechou = False
     if windiff_teamA != 0:
         fechou = True
-        history = read_history(ctx)
-        draftID = read_start(ctx)
+        history = data_base.read_history(ctx)
+        draftID = data_base.read_start(ctx)
         teamA = current
         teamB = current
         teamA = teamA.rename(
@@ -328,8 +280,7 @@ async def close(ctx):
                             axis=0, inplace=True, ascending=False,
                             na_position='first')
         history = pandas.concat([history, current], ignore_index=True)
-        history.to_csv(filenames(ctx, FILE_HISTORY), sep=',',
-                       index=False, encoding='utf-8')
+        await data_base.save_history(ctx, history)
         await send_file(ctx)
         await clear(ctx)
     return fechou
@@ -339,7 +290,7 @@ async def add_players(ctx, team, p1: discord.User, p2: discord.User = None,
                       p3: discord.User = None, p4: discord.User = None,
                       p5: discord.User = None, p6: discord.User = None,
                       p7: discord.User = None, p8: discord.User = None):
-    event_playes = read_players(ctx)
+    event_playes = data_base.read_players(ctx)
     list = []
     list.append(p1)
     list.append(p2)
@@ -352,8 +303,7 @@ async def add_players(ctx, team, p1: discord.User, p2: discord.User = None,
     for player in list:
         if player is not None:
             event_playes = add_player(event_playes, player.id, team)
-    event_playes.to_csv(filenames(ctx, FILE_PLAYERS),
-                        sep=',', index=False, encoding='utf-8')
+    await data_base.save_players(ctx, event_playes)
     await print_event(ctx, event_playes)
 
 
@@ -370,60 +320,21 @@ def add_player(event_playes, userdata: str, team=None):
                 team = 'B'
             else:
                 team = event_playes['Team'].value_counts().idxmin()
-        df2 = dataframe_players([[user, team]])
+        df2 = data_base.dataframe_players([[user, team]])
         event_playes = pandas.concat([event_playes, df2], ignore_index=True)
     return event_playes
 
 
-def read_players(ctx):
-    if os.stat(filenames(ctx, FILE_PLAYERS)).st_size == 0:
-        return dataframe_players()
-    else:
-        return pandas.read_csv(filenames(ctx, FILE_PLAYERS))
-
-
-def read_current(ctx):
-    if os.stat(filenames(ctx, FILE_CURRENT)).st_size == 0:
-        return dataframe_current()
-    else:
-        return pandas.read_csv(filenames(ctx, FILE_CURRENT))
-
-
-def dataframe_current():
-    return pandas.DataFrame(columns=['Team A', 'W-A', 'Team B', 'W-B'])
-
-
-def dataframe_players(list=None):
-    if list is None:
-        return pandas.DataFrame(columns=['Player', 'Team'])
-    else:
-        return pandas.DataFrame(list, columns=['Player', 'Team'])
-
-
-def read_history(ctx):
-    if os.stat(filenames(ctx, FILE_HISTORY)).st_size == 0:
-        return pandas.DataFrame(columns=['Date', 'Victory', 'Player', 'Match',
-                                         'Game-Win', 'Opponent', 'Game-Lose'])
-    else:
-        return pandas.read_csv(filenames(ctx, FILE_HISTORY))
-
-
 async def send_file(ctx):
-    file_path = filenames(ctx, FILE_HISTORY)
-    try:
-        target_channel = discord.utils.get(
-            ctx.guild.channels, name='db')
-        with open(file_path, 'rb') as file:
-            file_data = discord.File(file)
-            await target_channel.send(file=file_data)
-    except Exception:
-        return
-
-
-def filenames(ctx, name):
-    folder_path = 'channel_' + str(ctx.guild.id)
-    full_path = os.path.join(folder_path, name)
-    return str(full_path)
+    # file_path = filenames(ctx, FILE_HISTORY)
+    # try:
+    #    target_channel = discord.utils.get(
+    #        ctx.guild.channels, name='db')
+    #    with open(file_path, 'rb') as file:
+    #        file_data = discord.File(file)
+    #        await target_channel.send(file=file_data)
+    # except Exception:
+    return
 
 
 def windiff_a(currentin):
@@ -440,7 +351,7 @@ def windiff_a(currentin):
 
 async def print_event(ctx, data=None):
     if data is None:
-        dt = read_current(ctx)
+        dt = data_base.read_current(ctx)
     else:
         dt = data
     if len(dt) > 0 and dt.shape[1] > 2:
@@ -450,7 +361,7 @@ async def print_event(ctx, data=None):
 
 
 async def print_players(ctx):
-    dt = read_players(ctx)
+    dt = data_base.read_players(ctx)
     embed = discord.Embed(title="__**Players**__", color=0x03f8fc)
     list = dt.values.tolist()
     playersA = ''
@@ -467,7 +378,7 @@ async def print_players(ctx):
 
 
 async def print_event_started(ctx, dt):
-    name = read_start(ctx)
+    name = data_base.read_start(ctx)
     embed = discord.Embed(title=f"__**{name[:10]}**__", color=0x03f8fc)
     list = dt.values.tolist()
     count = len(list)
@@ -523,7 +434,7 @@ async def resultado(ctx, userW, userL, loss=0):
     gameloss = 0
     if loss != 0:
         gameloss = 1
-    df = read_current(ctx)
+    df = data_base.read_current(ctx)
     objs = df.loc[df['Team A'].isin(
         [userW, userL]) & df['Team B'].isin([userW, userL])]
     matches = len(objs)
@@ -535,8 +446,7 @@ async def resultado(ctx, userW, userL, loss=0):
         else:
             df.at[objs.index[matches-1], 'W-A'] = gameloss
             df.at[objs.index[matches-1], 'W-B'] = 2
-        df.to_csv(filenames(ctx, FILE_CURRENT), sep=',',
-                  index=False, encoding='utf-8')
+        await data_base.save_current(ctx, df)
     await print_event(ctx)
 
 
