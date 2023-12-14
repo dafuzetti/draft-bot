@@ -207,8 +207,8 @@ async def history_run(ctx, draft: int = None):
                 str(match[6]) + ' ' + str(match[5]) + '\n'
     embed.add_field(
         name=f'Winners: {totalA}', value=playersA, inline=False)
-    embed.add_field(name=f'Less winners: {
-                    totalB}', value=playersB, inline=False)
+    embed.add_field(
+        name=f'Less winners: {totalB}', value=playersB, inline=False)
     embed.add_field(name='Matches: ' + str(totalA + totalB),
                     value=marchlist, inline=False)
     await ctx.response.send_message(embed=embed)
@@ -401,7 +401,8 @@ async def print_event_started(ctx, dt):
             playersA = playersA + match[0]
             playersB = playersB + match[2]
             toadd = toadd + nrp + 1
-        matches = matches + str(match[0]) + ' ' + str(match[1]) + \'-' + str(match[3]) + ' ' + str(match[2]) + '\n'
+        matches = matches + str(match[0]) + ' ' + str(match[1]) + \
+            '-' + str(match[3]) + ' ' + str(match[2]) + '\n'
 
     if winA > winB:
         emjA = ':airplane:'
