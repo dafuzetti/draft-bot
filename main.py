@@ -180,26 +180,25 @@ async def history(ctx, draft: int = None):
 async def event(ctx, action: str = '', draftdate: str = None):
     data = None
     ifclose = False
-    match action.lower():
-        case 'start':
-            if draftdate is None:
-                draftdate = date.today().strftime("%d/%m/%Y")
-            data = await start(ctx, draftdate)
+    if action.lower() == 'start':
+        if draftdate is None:
+            draftdate = date.today().strftime("%d/%m/%Y")
+        data = await start(ctx, draftdate)
+        await print_event(ctx, data)
+    elif action.lower() == 'close':
+        ifclose = await close(ctx)
+        if ifclose:
+            await history_run(ctx)
+        else:
             await print_event(ctx, data)
-        case 'close':
-            ifclose = await close(ctx)
-            if ifclose:
-                await history_run(ctx)
-            else:
-                await print_event(ctx, data)
-        case 'clear':
-            await clear(ctx)
-            await print_event(ctx)
-        case 'rdm':
-            data = event_rdm(ctx)
-            await print_event(ctx, data)
-        case _:
-            await print_event(ctx)
+    elif action.lower() == 'clear':
+        await clear(ctx)
+        await print_event(ctx)
+    elif action.lower() == 'rdm':
+        data = event_rdm(ctx)
+        await print_event(ctx, data)
+    else action.lower() == _:
+        await print_event(ctx)
 
 
 async def history_run(ctx, draft: int = None):
