@@ -197,7 +197,7 @@ async def event(ctx, action: str = '', draftdate: str = None):
     elif action.lower() == 'rdm':
         data = event_rdm(ctx)
         await print_event(ctx, data)
-    else action.lower() == _:
+    else:
         await print_event(ctx)
 
 
