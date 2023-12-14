@@ -236,10 +236,8 @@ async def history_run(ctx, draft: int = None):
                 str(match[6]) + ' ' + str(match[5]) + '\n'
     embed.add_field(
         name=f'Winners: {totalA}', value=playersA, inline=False)
-    embed.add_field(name=f'Less winners: {
-                    totalB}', value=playersB, inline=False)
-    embed.add_field(name='Matches: ' + str(totalA + totalB),
-                    value=marchlist, inline=False)
+    embed.add_field(name=f'Less winners: {totalB}', value=playersB, inline=False)
+    embed.add_field(name='Matches: ' + str(totalA + totalB), value=marchlist, inline=False)
     await ctx.response.send_message(embed=embed)
 
 
@@ -249,16 +247,13 @@ def event_rdm(ctx):
     random_indices = numpy.random.choice(df.index, half_size, replace=False)
     df.loc[random_indices, 'Team'] = 'A'
     df.loc[~df.index.isin(random_indices), 'Team'] = 'B'
-    df.to_csv(filenames(ctx, FILE_PLAYERS), sep=',',
-              index=False, encoding='utf-8')
+    df.to_csv(filenames(ctx, FILE_PLAYERS), sep=',', index=False, encoding='utf-8')
     return df
 
 
 async def clear(ctx):
-    dataframe_players().to_csv(filenames(ctx, FILE_PLAYERS),
-                               sep=',', index=False, encoding='utf-8')
-    dataframe_current().to_csv(filenames(ctx, FILE_CURRENT),
-                               sep=',', index=False, encoding='utf-8')
+    dataframe_players().to_csv(filenames(ctx, FILE_PLAYERS), sep=',', index=False, encoding='utf-8')
+    dataframe_current().to_csv(filenames(ctx, FILE_CURRENT), sep=',', index=False, encoding='utf-8')
     read_start(ctx, date.today().strftime("%d/%m/%Y"))
 
 
@@ -269,13 +264,11 @@ async def start(ctx, date):
     if len(df) in [4, 6, 8] and counts.nunique() == 1 and len(counts) == 2:
         TeamA = df[df['Team'] == 'A']
         TeamB = df.drop(TeamA.index)
-        Mlist = itertools.product(
-            TeamA['Player'].tolist(), TeamB['Player'].tolist())
+        Mlist = itertools.product(TeamA['Player'].tolist(), TeamB['Player'].tolist())
         df = pandas.DataFrame(Mlist, columns=['Team A', 'Team B'])
         df.insert(1, 'W-A', '-')
         df.insert(3, 'W-B', '-')
-        df.to_csv(filenames(ctx, FILE_CURRENT), sep=',',
-                  index=False, encoding='utf-8')
+        df.to_csv(filenames(ctx, FILE_CURRENT), sep=',', index=False, encoding='utf-8')
     return df
 
 
