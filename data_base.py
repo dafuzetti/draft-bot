@@ -1,5 +1,6 @@
 import pandas
 import os
+import psycopg2
 from datetime import datetime
 from datetime import date
 
@@ -53,10 +54,14 @@ def filenames(ctx, name):
 
 
 def read_players(ctx):
-    if os.stat(filenames(ctx, FILE_PLAYERS)).st_size == 0:
-        return dataframe_players()
-    else:
-        return pandas.read_csv(filenames(ctx, FILE_PLAYERS))
+    # samambotdb-test.railway.internal
+    conn = psycopg2.connect("samambotdb-test.railway.internal")
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM player;')
+    rows = cur.fetchall()
+    conn.commit()
+    conn.close()
+    return dataframe_players(rows)
 
 
 def read_current(ctx):
