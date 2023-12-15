@@ -1,7 +1,7 @@
 import pandas
 import os
 import psycopg2
-from sqlalchemy import create_engine
+from urllib.parse import urlparse
 from datetime import datetime
 from datetime import date
 
@@ -56,13 +56,34 @@ def filenames(ctx, name):
 
 def read_players(ctx):
     # samambotdb-test.railway.internal
-    db_url = "samambotdb-test.railway.internal"
-    engine = create_engine(db_url)
-    conn = psycopg2.connect(db_url)
-    result = engine.execute("SELECT * FROM player")
-    rows = result.fetchall()
-    print(rows)
-    conn.close()
+    # Get the DATABASE_URL from Railway environment
+    database_url = "samambotdb-test.railway.internal"
+
+    # Parse the DATABASE_URL
+    url = urlparse(database_url)
+
+    # Connect to the database
+    connection = psycopg2.connect(
+        database=url.path[1:],
+        user=url.username,
+        password=url.password,
+        host=url.hostname,
+        port=url.port
+    )
+
+    # Create a cursor
+    cursor = connection.cursor()
+
+    # Example: Execute a SQL query
+    cursor.execute("SELECT * FROM player")
+    rows = cursor.fetchall()
+    for row in rows:
+        print(row)
+
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
+
     return dataframe_players(rows)
 
 

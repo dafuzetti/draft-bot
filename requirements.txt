@@ -3,4 +3,3 @@ python-dotenv
 python-decouple
 pandas
 psycopg2
-sqlalchemy
