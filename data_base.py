@@ -85,6 +85,7 @@ def read_players(ctx):
     connection.close()
 
     return dataframe_players(rows)
+  
 
 
 def read_current(ctx):
