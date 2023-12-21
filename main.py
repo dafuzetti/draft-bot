@@ -1,6 +1,5 @@
 from discord import app_commands
 import discord
-import pandas
 import data_base
 import functions
 from decouple import config
@@ -12,7 +11,9 @@ bot = app_commands.CommandTree(client)
 
 
 @ bot.command(name='newevent', description='Create new event. teams: 2-A vs B or 0-Individual. Type: 0-all possible matches')
-async def newevent(ctx, teams: int = 2, type: int = 0):
+async def newevent(ctx):
+    teams: int = 2
+    type: int = 0
     await ctx.response.defer()
     data_base.new_event(ctx, teams, type)
     embed = functions.print_event(ctx)
@@ -20,20 +21,20 @@ async def newevent(ctx, teams: int = 2, type: int = 0):
 
 
 @ bot.command(name='play', description='Join the event.')
-async def play(ctx, team: str = None):
+async def play(ctx):
     await ctx.response.defer()
-    functions.add_players(ctx, team, ctx.user)
+    functions.add_players(ctx, False, ctx.user)
     embed = functions.print_event(ctx)
     await ctx.followup.send(embed=embed, ephemeral=True)
 
 
 @ bot.command(name='team',
               description='Add up to 4 players to a team for the event.')
-async def team(ctx, team: str = None, p1: discord.User = None,
+async def team(ctx, p1: discord.User = None,
                p2: discord.User = None, p3: discord.User = None,
                p4: discord.User = None):
     await ctx.response.defer()
-    functions.add_players(ctx, team, p1, p2, p3, p4)
+    functions.add_players(ctx, True, p1, p2, p3, p4)
     embed = functions.print_event(ctx)
     await ctx.followup.send(embed=embed, ephemeral=True)
 
@@ -44,7 +45,7 @@ async def players(ctx, p1: discord.User, p2: discord.User = None,
                   p5: discord.User = None, p6: discord.User = None,
                   p7: discord.User = None, p8: discord.User = None):
     await ctx.response.defer()
-    functions.add_players(ctx, None, p1, p2, p3, p4, p5, p6, p7, p8)
+    functions.add_players(ctx, False, p1, p2, p3, p4, p5, p6, p7, p8)
     embed = functions.print_event(ctx)
     await ctx.followup.send(embed=embed, ephemeral=True)
 
@@ -52,16 +53,14 @@ async def players(ctx, p1: discord.User, p2: discord.User = None,
 @ bot.command(name='event', description='Manage current event.')
 async def event(ctx, action: str = '', draftdate: str = None):
     await ctx.response.defer()
-    draft = None
+    event_id = None
     if action.lower() == 'start':
         functions.start(ctx)
     elif action.lower() == 'close':
-        data_base.close_event(ctx)
+        event_id = data_base.close_event(ctx)
     elif action.lower() == 'clear':
         data_base.clear_event(ctx)
-    elif action.lower() == 'rdm':
-        draft = None
-    embed = functions.print_event(ctx)
+    embed = functions.print_event(ctx, event_id)
     await ctx.followup.send(embed=embed, ephemeral=True)
 
 
@@ -90,75 +89,44 @@ async def result(ctx, player_win: discord.User,
     await ctx.followup.send(embed=embed, ephemeral=True)
 
 
-@ bot.command(name='history', description='Draft history details.')
-async def history(ctx, draft: int = None):
+@ bot.command(name='history', description='Event list or history details for specific events.')
+async def history(ctx, event_id: int = None, channel: bool = False):
     await ctx.response.defer()
-    embed = functions.print_event(ctx, draft)
+    if event_id is None:
+        embed = functions.print_history(ctx, channel)
+    else:
+        embed = functions.print_event(ctx, event_id)
+    await ctx.followup.send(embed=embed, ephemeral=True)
+
+
+@ bot.command(name='ids', description='History of draft\'s dates list.')
+async def ids(ctx):
+    await ctx.response.defer()
+    embed = discord.Embed(
+        title=f"__**Server ID: {ctx.guild.id}**__", color=0x03f8fc)
+    count = 0
+    players = ''
+    list = data_base.player_history(ctx)
+    for player in list:
+        count = count + 1
+        players = players + str(count) + '-' + player[0] + ' (' + str(
+            player[1]) + '): ' + str(player[0])[2:~0] + '\n'
+
+    embed.add_field(name='Players', value=players, inline=False)
     await ctx.followup.send(embed=embed, ephemeral=True)
 
 
 @ bot.command(name='score', description='All time scoreboard for the channel!')
 async def score(ctx):
-    dataFrame = data_base.read_history(ctx)
-    dt = pandas.DataFrame()
-
-    dt = dataFrame.groupby(['Player', 'Date']).agg(
-        {'Victory': 'mean', 'Match': ['count', 'sum']}).reset_index()
-    dt.columns = [col[0] + '_' + col[1] if col[1] else col[0]
-                  for col in dt.columns]
-    dt = dt.groupby(['Player']).agg(
-        {'Date': 'count', 'Victory_mean': 'sum', 'Match_sum': 'sum', 'Match_count': 'sum'}).reset_index()
-    dt = dt.rename(
-        columns={"Date": "T(D)",
-                 "Victory_mean": "Draft Wins",
-                 "Match_count": "T(M)",
-                 "Match_sum": "Match Wins"})
-    dt = dt.reindex(
-        columns=['Draft Wins', 'T(D)', 'Match Wins', 'T(M)', 'Player'])
-    dt['Draft Wins'] = dt['Draft Wins'].astype(int)
-    dt.sort_values(['Draft Wins', 'Match Wins', 'Player'],
-                   axis=0, inplace=True, ascending=False,
-                   na_position='first')
-
+    await ctx.response.defer()
+    list = data_base.read_score(ctx)
     embed = discord.Embed(title="__**Scoreboard:**__", color=0x03f8fc)
     pos = 0
-    list = dt.values.tolist()
     for match in list:
         pos = pos + 1
         embed.add_field(name=f'Rank: {pos}',
-                        value=f'Player: {match[4]}\nDraft: {match[0]}/{match[1]} - {match[0]*100//match[1]}%\nMatch: {match[2]}/{match[3]} - {match[2]*100//match[3]}%', inline=True)
-    await ctx.response.send_message(embed=embed)
-
-
-@ bot.command(name='dates', description='History of draft\'s dates list.')
-async def dates(ctx):
-    hist = data_base.read_history(ctx)
-    embed = discord.Embed(title="__**Draft**__", color=0x03f8fc)
-    list = hist['Date'].unique()
-    count = 0
-    dates = ''
-    for match in list:
-        count = count + 1
-        dates = dates + str(count) + '-' + match + '\n'
-
-    embed.add_field(name='Dates', value=dates, inline=False)
-    await ctx.response.send_message(embed=embed)
-
-
-@ bot.command(name='ids', description='History of draft\'s dates list.')
-async def ids(ctx):
-    hist = data_base.read_history(ctx)
-    embed = discord.Embed(
-        title=f"__**Channel id:{ctx.guild.id}**__", color=0x03f8fc)
-    list = hist['Player'].unique()
-    count = 0
-    dates = ''
-    for match in list:
-        count = count + 1
-        dates = dates + str(count) + '-' + match + ': ' + match[2:~0] + '\n'
-
-    embed.add_field(name='Players', value=dates, inline=False)
-    await ctx.response.send_message(embed=embed)
+                        value=f'Player: {match[4]}\nDraft: {match[0]}/{match[1]} - {match[5]}%\nMatch: {match[2]}/{match[3]} - {match[6]}%', inline=True)
+    await ctx.followup.send(embed=embed, ephemeral=True)
 
 
 @ client.event
